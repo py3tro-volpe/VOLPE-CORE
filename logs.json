@@ -1,0 +1,32 @@
+[
+  {
+    "ts": "2025-11-23T01:03:43.673Z",
+    "type": "client_ready",
+    "user": "VOLPE Core#0562"
+  },
+  {
+    "ts": "2025-11-23T01:15:24.700Z",
+    "type": "client_ready",
+    "user": "VOLPE Core#0562"
+  },
+  {
+    "ts": "2025-11-23T01:16:50.462Z",
+    "type": "webhook_top_error",
+    "error": "InternalServerError: stream is not readable"
+  },
+  {
+    "ts": "2025-11-23T01:17:44.414Z",
+    "type": "client_ready",
+    "user": "VOLPE Core#0562"
+  },
+  {
+    "ts": "2025-11-23T01:17:53.202Z",
+    "type": "webhook_top_error",
+    "error": "InternalServerError: stream is not readable"
+  },
+  {
+    "ts": "2025-11-23T02:06:52.309Z",
+    "type": "client_ready",
+    "user": "VOLPE Core#0562"
+  }
+]
