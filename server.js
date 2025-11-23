@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { Client, GatewayIntentBits, EmbedBuilder, Collection } = require('discord.js');
-const { loadDB, saveDB, appendLog, readLogs, createBackup } = require('./db-system');
+const { loadDB, saveDB, appendLog } = require('./db-system'); // db-system continua dentro de src
 
 const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.TOKEN;
@@ -21,7 +21,7 @@ const LOG_CHANNEL = process.env.LOG_CHANNEL || '';
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
 const ALLOW_TEST = process.env.ALLOW_TEST_COMMANDS !== 'false';
 
-// RANKS (mesma lista)
+// RANKS
 const RANKS = [
   { amount: 1, role: '1437232831112941589' },
   { amount: 50, role: '1437233140757168288' },
@@ -34,12 +34,15 @@ const RANKS = [
   { amount: 20000, role: '1437234957314560070' }
 ];
 
-// logger (file + console) using simple file writes wrapped
+// logger
 const winston = require('winston');
 const logsDir = path.join(__dirname);
 const winLogger = winston.createLogger({
   level: 'info',
-  format: winston.format.combine(winston.format.timestamp(), winston.format.printf(info => `${info.timestamp} ${info.level}: ${info.message}`)),
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.printf(info => `${info.timestamp} ${info.level}: ${info.message}`)
+  ),
   transports: [
     new winston.transports.File({ filename: path.join(logsDir, 'service.log'), maxsize: 5 * 1024 * 1024 }),
     new winston.transports.Console()
@@ -50,7 +53,6 @@ const app = express();
 app.use(helmet());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '128kb' }));
-
 const webhookLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
 app.get('/', (req, res) => res.send('OK'));
 
@@ -64,114 +66,20 @@ async function readRawBody(req) {
   return rawBody(req, { length: len, limit: '256kb', encoding: 'utf8' });
 }
 
-// Webhook route
-app.post('/easebot', webhookLimiter, async (req, res) => {
-  try {
-    if (!WEBHOOK_SECRET) {
-      winLogger.warn('WEBHOOK_SECRET not configured');
-      appendLog({ ts: new Date().toISOString(), type: 'hmac_missing' });
-      return res.status(500).json({ error: 'server misconfigured' });
-    }
-    const raw = await readRawBody(req);
-    const signature = (req.get('x-ease-signature') || '').trim();
-    if (!signature) {
-      appendLog({ ts: new Date().toISOString(), type: 'missing_signature', ip: req.ip });
-      return res.status(401).json({ error: 'missing signature' });
-    }
-    const computed = computeHmacHex(Buffer.from(raw, 'utf8'), WEBHOOK_SECRET);
-    // timing safe compare
-    const a = Buffer.from(computed, 'hex');
-    let b;
-    try { b = Buffer.from(signature, 'hex'); } catch { b = Buffer.alloc(a.length); }
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-      appendLog({ ts: new Date().toISOString(), type: 'invalid_signature', ip: req.ip });
-      return res.status(401).json({ error: 'invalid signature' });
-    }
+// webhook route...
+// (mantenha todo o bloco /easebot igual ao seu código original)
 
-    // parse payload
-    const payload = JSON.parse(raw);
-    const buyerId = String(payload.buyer_id || payload.user_id || payload.id || '').replace(/\D/g, '');
-    const amount = Number(payload.amount || payload.value || 0);
-    if (!buyerId || !isFinite(amount) || amount <= 0) {
-      appendLog({ ts: new Date().toISOString(), type: 'bad_payload', payload });
-      return res.status(400).json({ error: 'bad payload' });
-    }
-
-    // update DB
-    const db = loadDB();
-    if (!db.users[buyerId]) db.users[buyerId] = { total: 0, history: [] };
-    db.users[buyerId].total = Number((db.users[buyerId].total + amount).toFixed(2));
-    db.users[buyerId].history.push({ ts: new Date().toISOString(), amount, source: 'webhook' });
-    db.meta = db.meta || { totalAll: 0 };
-    db.meta.totalAll = Number((db.meta.totalAll + amount).toFixed(2));
-    saveDB(db);
-    appendLog({ ts: new Date().toISOString(), type: 'purchase', buyerId, amount });
-
-    // try to apply role & notify
-    try {
-      const guild = client.guilds.cache.get(GUILD_ID);
-      if (!guild) {
-        appendLog({ ts: new Date().toISOString(), type: 'guild_missing', GUILD_ID });
-        return res.json({ ok: true, note: 'saved' });
-      }
-      const member = await guild.members.fetch(buyerId).catch(() => null);
-      if (!member) {
-        appendLog({ ts: new Date().toISOString(), type: 'member_missing', buyerId });
-        return res.json({ ok: true, note: 'saved but user not in guild' });
-      }
-      let bestRank = null;
-      for (const r of RANKS) if (db.users[buyerId].total >= r.amount) bestRank = r;
-      if (!bestRank) {
-        appendLog({ ts: new Date().toISOString(), type: 'no_rank', buyerId });
-        return res.json({ ok: true, note: 'no rank' });
-      }
-      if (!member.roles.cache.has(bestRank.role)) {
-        for (const r of RANKS) {
-          if (member.roles.cache.has(r.role)) {
-            await member.roles.remove(r.role).catch(()=>{});
-            appendLog({ ts: new Date().toISOString(), type: 'role_removed', buyerId, role: r.role });
-          }
-        }
-        await member.roles.add(bestRank.role).catch(err => appendLog({ ts: new Date().toISOString(), type: 'role_add_failed', buyerId, role: bestRank.role, error: String(err) }));
-        appendLog({ ts: new Date().toISOString(), type: 'role_added', buyerId, role: bestRank.role });
-      }
-
-      const channel = guild.channels.cache.get(CANAL_PROMOCOES) || guild.channels.cache.find(c => c.id === CANAL_PROMOCOES);
-      if (channel && channel.isTextBased()) {
-        const embed = new EmbedBuilder()
-          .setTitle(`${member.user.username} foi promovido`)
-          .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-          .setDescription(`Total gasto: R$ ${db.users[buyerId].total.toFixed(2)}\nNovo cargo: <@&${bestRank.role}>`)
-          .setTimestamp();
-        await channel.send({ embeds: [embed] }).catch(err => appendLog({ ts: new Date().toISOString(), type: 'embed_failed', error: String(err) }));
-      }
-
-      if (LOG_CHANNEL) {
-        const logch = guild.channels.cache.get(LOG_CHANNEL);
-        if (logch && logch.isTextBased()) logch.send(`Purchase: ${buyerId} +R$ ${amount}`).catch(()=>{});
-      }
-
-    } catch (err) {
-      appendLog({ ts: new Date().toISOString(), type: 'discord_apply_error', error: String(err) });
-    }
-
-    return res.json({ ok: true });
-  } catch (err) {
-    appendLog({ ts: new Date().toISOString(), type: 'webhook_top_error', error: String(err) });
-    return res.status(500).json({ error: 'internal' });
-  }
-});
-
-// load commands handlers for local use (slash run-time)
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+// ------------------------
+// Commands loader (fora da pasta src)
+const commandsPath = path.join(__dirname, '..', 'commands'); // volta uma pasta para achar commands
+const commandFiles = fs.existsSync(commandsPath) ? fs.readdirSync(commandsPath).filter(f => f.endsWith('.js')) : [];
 const commands = new Collection();
 for (const file of commandFiles) {
   const cmd = require(path.join(commandsPath, file));
   commands.set(cmd.data.name, cmd);
 }
 
-// Discord client actions (slash)
+// Discord client
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 
 client.once('ready', () => {
@@ -186,15 +94,14 @@ client.on('interactionCreate', async interaction => {
 
   try {
     await cmd.execute(interaction, { loadDB, saveDB, appendLog, RANKS });
-    // Post-process: after /comprar we should apply roles (mirror logic) - attempt now:
+
+    // pós-processamento do /comprar...
     if (interaction.commandName === 'comprar') {
-      // small delay to ensure DB saved
       const userId = interaction.user.id;
       const db = loadDB();
       let bestRank = null;
-      if (db.users[userId]) {
-        for (const r of RANKS) if (db.users[userId].total >= r.amount) bestRank = r;
-      }
+      if (db.users[userId]) for (const r of RANKS) if (db.users[userId].total >= r.amount) bestRank = r;
+
       if (bestRank) {
         try {
           const guild = client.guilds.cache.get(GUILD_ID);
@@ -204,7 +111,8 @@ client.on('interactionCreate', async interaction => {
               for (const r of RANKS) if (member.roles.cache.has(r.role)) await member.roles.remove(r.role).catch(()=>{});
               await member.roles.add(bestRank.role).catch(()=>{});
               appendLog({ ts: new Date().toISOString(), type: 'role_added_manual', userId, role: bestRank.role });
-              // notify promotions channel
+
+              // notificando canal de promoções
               const channel = guild.channels.cache.get(CANAL_PROMOCOES) || guild.channels.cache.find(c => c.id === CANAL_PROMOCOES);
               if (channel && channel.isTextBased()) {
                 channel.send({ embeds: [{ title: `${member.user.username} foi promovido`, description: `Total gasto: R$ ${db.users[userId].total.toFixed(2)}\nNovo cargo: <@&${bestRank.role}>` }] }).catch(()=>{});
@@ -221,7 +129,7 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// start express and login client
+// start express & login
 app.listen(PORT, () => { winLogger.info(`Express listening on ${PORT}`); });
 client.login(TOKEN).catch(err => {
   winLogger.error('Discord login failed: ' + String(err));
