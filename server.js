@@ -152,7 +152,8 @@ for (const file of commandFiles) {
 // Discord client
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 
-client.once('ready', () => {
+// **Evento atualizado para clientReady**
+client.once('clientReady', () => {
   winLogger.info(`Discord ready: ${client.user.tag}`);
   appendLog({ ts: new Date().toISOString(), type: 'client_ready', user: client.user.tag });
 });
