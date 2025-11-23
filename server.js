@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { Client, GatewayIntentBits, EmbedBuilder, Collection } = require('discord.js');
-const { loadDB, saveDB, appendLog } = require('./db-system'); // db-system continua dentro de src
+const { loadDB, saveDB, appendLog } = require('./src/db-system'); // db-system continua dentro de src
 
 const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.TOKEN;
