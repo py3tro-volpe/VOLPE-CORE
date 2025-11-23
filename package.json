@@ -1,12 +1,14 @@
 {
   "name": "easebot-pro",
   "version": "1.0.0",
-  "main": "src/server.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "register-commands": "node src/register-commands.js"
+    "start": "node server.js",
+    "register-commands": "node register-commands.js"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "discord.js": "^14.14.0",
     "dotenv": "^17.2.3",

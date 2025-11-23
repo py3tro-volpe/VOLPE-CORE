@@ -1,4 +1,3 @@
-// src/register-commands.js
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
@@ -14,8 +13,8 @@ if (!token || !clientId || !guildId) {
 }
 
 const commands = [];
-const commandsPath = path.join(__dirname, 'commands');
-const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+const commandsPath = path.join(__dirname, 'commands'); // agora aponta para a raiz
+const files = fs.existsSync(commandsPath) ? fs.readdirSync(commandsPath).filter(f => f.endsWith('.js')) : [];
 
 for (const file of files) {
   const cmd = require(path.join(commandsPath, file));

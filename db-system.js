@@ -1,17 +1,20 @@
-// src/db-system.js
 const fs = require('fs');
 const path = require('path');
 
-const DB_DIR = __dirname;
+const DB_DIR = __dirname; // raiz do projeto
 const dbPath = path.join(DB_DIR, 'db.json');
 const logsPath = path.join(DB_DIR, 'logs.json');
 const backupDir = path.join(DB_DIR, 'backups');
 
+// criar pastas e arquivos se não existirem
 if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({ users: {}, meta: { totalAll: 0 } }, null, 2));
 if (!fs.existsSync(logsPath)) fs.writeFileSync(logsPath, JSON.stringify([], null, 2));
 
-function readJSON(p) { return JSON.parse(fs.readFileSync(p, 'utf8')); }
+function readJSON(p) { 
+  return JSON.parse(fs.readFileSync(p, 'utf8')); 
+}
+
 function writeJSON(p, data) {
   const tmp = p + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
